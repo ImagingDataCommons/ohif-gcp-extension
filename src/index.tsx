@@ -1,4 +1,5 @@
 import { id } from './id';
+import getCustomizationModule from './getCustomizationModule';
 
 /**
  * You can remove any of the following modules if you don't need them.
@@ -115,4 +116,5 @@ export default {
       );
     }
   },
+  getCustomizationModule,
 };
