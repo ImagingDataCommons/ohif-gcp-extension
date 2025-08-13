@@ -1,5 +1,4 @@
 import { id } from './id';
-import getCustomizationModule from './getCustomizationModule';
 
 /**
  * You can remove any of the following modules if you don't need them.
@@ -16,6 +15,8 @@ export default {
    * native format. DataSources are defined by an object of { name, type, createDataSource }.
    */
   preRegistration: ({ extensionManager, appConfig, servicesManager }) => {
+    console.debug("Initializing GCP Extension...");
+
     const { uiNotificationService } = servicesManager.services;
 
     const GCP_DATA_SOURCE_NAME = "gcp";
@@ -116,5 +117,4 @@ export default {
       );
     }
   },
-  getCustomizationModule,
 };
