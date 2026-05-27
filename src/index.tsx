@@ -1,4 +1,6 @@
 import { id } from './id';
+import getToolbarModule from './getToolbarModule';
+import modeSelectorCustomization from './customizations/modeSelectorCustomization';
 
 /**
  * You can remove any of the following modules if you don't need them.
@@ -9,6 +11,17 @@ export default {
    * You ID can be anything you want, but it should be unique.
    */
   id,
+  getToolbarModule,
+  getCustomizationModule() {
+    return [
+      {
+        name: 'default',
+        value: {
+          'ohif.modeSelector': modeSelectorCustomization,
+        },
+      },
+    ];
+  },
   /**
    * DataSourceModule should provide a list of data sources to be used in OHIF.
    * DataSources can be used to map the external data formats to the OHIF's

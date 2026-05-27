@@ -31,6 +31,8 @@
     "@ohif/core": "3.11.0",
     "@ohif/extension-default": "3.11.0",
     "@ohif/extension-cornerstone": "3.11.0",
+    "@ohif/ui-next": "3.11.0",
+    "@ohif/app": "3.11.0",
     "@ohif/i18n": "^1.0.0",
     "prop-types": "^15.6.2",
     "react": "^18.3.1",
