@@ -18,12 +18,12 @@ The **GCP Extension** enhances the OHIF viewer, enabling seamless integration wi
 
 ### 1. Add GCP Extension as a Dependency
 
-In the OHIF `package.json` file, include `ohif-gcp-extension` as a dependency. Since it’s not published to NPM, specify the GitHub repository URL and branch name.
+In the OHIF `package.json` file, include `@idc/gcp-extension` as a dependency. This package is scoped under `@idc` and is not published to the public NPM registry — pin it to a specific Git commit hash (not a branch name) to prevent dependency confusion.
 
 ```json
 /** File: platform/app/package.json */
 "dependencies": {
-  "ohif-gcp-extension": "https://github.com/ImagingDataCommons/ohif-gcp-extension#main",
+  "@idc/gcp-extension": "https://github.com/ImagingDataCommons/ohif-gcp-extension#<commit-sha>",
   ...
 }
 ```
@@ -35,9 +35,7 @@ In the OHIF `package.json` file, include `ohif-gcp-extension` as a dependency. S
 "extensions": [
   ...
   {
-    "packageName": "ohif-gcp-extension"
+    "packageName": "@idc/gcp-extension"
   },
  ...
 ```
-
-
