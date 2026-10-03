@@ -48,14 +48,15 @@ export default {
       sourceName: GCP_DATA_SOURCE_NAME,
       configuration: {
         name: GCP_DATA_SOURCE_NAME,
-        qidoSupportsIncludeField: false,
+        qidoSupportsIncludeField: true,
         imageRendering: "wadors",
         thumbnailRendering: "wadors",
         enableStudyLazyLoad: true,
-        supportsFuzzyMatching: false,
+        supportsFuzzyMatching: true,
         supportsWildcard: false,
         singlepart: "bulkdata,video,pdf",
-        useBulkDataURI: false,
+        bulkDataURI: { enabled: false },
+        omitQuotationForMultipartRequest: true,
         onConfiguration: (dicomWebConfig, options) => {
           const extractParams = (url) => ({
             project: url.split("projects/")[1].split("/")[0],
@@ -75,15 +76,15 @@ export default {
                 qidoRoot: pathUrl,
                 wadoUri: pathUrl,
                 wadoUriRoot: pathUrl,
-                qidoSupportsIncludeField: false,
+                qidoSupportsIncludeField: true,
                 imageRendering: "wadors",
                 thumbnailRendering: "wadors",
                 enableStudyLazyLoad: true,
-                supportsFuzzyMatching: false,
+                supportsFuzzyMatching: true,
                 supportsWildcard: false,
                 singlepart: "bulkdata,video,pdf",
-                useBulkDataURI: false,
-                bulkDataURI: undefined,
+                bulkDataURI: { enabled: false },
+                omitQuotationForMultipartRequest: true,
               };
             } else {
               uiNotificationService.show({
