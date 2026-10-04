@@ -3,12 +3,17 @@ import getToolbarModule from './getToolbarModule';
 import modeSelectorCustomization from './customizations/modeSelectorCustomization';
 
 /**
- * You can remove any of the following modules if you don't need them.
+ * GCP Extension for IDC.
+ *
+ * This extension provides:
+ * - GCP data source with onConfiguration for dynamic URL parsing from ?gcp= query param
+ * - Merge data source combining IDC + GCP when ?gcp= param is present
+ * - Mode selector customization for GCP Healthcare API path navigation
+ * - Toolbar module for mode selector UI
  */
 export default {
   /**
    * Only required property. Should be a unique value across all extensions.
-   * You ID can be anything you want, but it should be unique.
    */
   id,
   getToolbarModule,
@@ -23,45 +28,49 @@ export default {
     ];
   },
   /**
-   * DataSourceModule should provide a list of data sources to be used in OHIF.
-   * DataSources can be used to map the external data formats to the OHIF's
-   * native format. DataSources are defined by an object of { name, type, createDataSource }.
+   * preRegistration creates data sources for GCP Healthcare API access.
+   * - 'gcp' data source: Configured dynamically from ?gcp= query param
+   * - 'gcp-extension-merge': Merge data source combining IDC + GCP (only when ?gcp= present)
    */
   preRegistration: ({ extensionManager, appConfig, servicesManager }) => {
-    console.debug("Initializing GCP Extension...");
+    console.debug('[GCP Extension] Initializing...');
 
     const { uiNotificationService } = servicesManager.services;
 
-    const GCP_DATA_SOURCE_NAME = "gcp";
+    const GCP_DATA_SOURCE_NAME = 'gcp';
+    const IDC_DATA_SOURCE_NAME = 'idc-dicomweb';
 
-    const isValidHealthcareURL = (url) => {
-      const regex = /^(https:\/\/healthcare\.googleapis\.com\/v1(?:[^/]+)?\/|\/)?projects\/[^/]+\/locations\/[^/]+\/datasets\/[^/]+\/dicomStores\/[^/]+(\/study\/[^/]+)?$/;
+    const isValidHealthcareURL = (url: string): boolean => {
+      const regex =
+        /^(https:\/\/healthcare\.googleapis\.com\/v1(?:[^/]+)?\/|\/)?projects\/[^/]+\/locations\/[^/]+\/datasets\/[^/]+\/dicomStores\/[^/]+(\/study\/[^/]+)?$/;
       return regex.test(url);
     };
 
-    const defaultDataSourceName = appConfig.defaultDataSourceName;
-    const defaultDataSource = appConfig.dataSources.find((dataSource) => dataSource.sourceName === defaultDataSourceName);
+    const defaultDataSource = appConfig.dataSources.find(
+      (dataSource: { sourceName: string }) => dataSource.sourceName === IDC_DATA_SOURCE_NAME
+    );
 
+    /** Create GCP data source with dynamic configuration */
     extensionManager.addDataSource({
-      friendlyName: "GCP DICOMWeb Data Source From Query Params",
-      namespace: "@ohif/extension-default.dataSourcesModule.dicomweb",
+      friendlyName: 'GCP DICOMWeb Data Source From Query Params',
+      namespace: '@ohif/extension-default.dataSourcesModule.dicomweb',
       sourceName: GCP_DATA_SOURCE_NAME,
       configuration: {
         name: GCP_DATA_SOURCE_NAME,
         qidoSupportsIncludeField: false,
-        imageRendering: "wadors",
-        thumbnailRendering: "wadors",
+        imageRendering: 'wadors',
+        thumbnailRendering: 'wadors',
         enableStudyLazyLoad: true,
         supportsFuzzyMatching: false,
         supportsWildcard: false,
-        singlepart: "bulkdata,video,pdf",
-        useBulkDataURI: false,
+        singlepart: 'bulkdata,video,pdf',
+        bulkDataURI: { enabled: false },
         onConfiguration: (dicomWebConfig, options) => {
-          const extractParams = (url) => ({
-            project: url.split("projects/")[1].split("/")[0],
-            location: url.split("locations/")[1].split("/")[0],
-            dataset: url.split("datasets/")[1].split("/")[0],
-            dicomStore: url.split("dicomStores/")[1].split("/")[0],
+          const extractParams = (url: string) => ({
+            project: url.split('projects/')[1].split('/')[0],
+            location: url.split('locations/')[1].split('/')[0],
+            dataset: url.split('datasets/')[1].split('/')[0],
+            dicomStore: url.split('dicomStores/')[1].split('/')[0],
           });
           const { query } = options;
           const gcp = query.get(GCP_DATA_SOURCE_NAME);
@@ -69,6 +78,7 @@ export default {
             if (isValidHealthcareURL(gcp)) {
               const { project, location, dataset, dicomStore } = extractParams(gcp);
               const pathUrl = `https://healthcare.googleapis.com/v1/projects/${project}/locations/${location}/datasets/${dataset}/dicomStores/${dicomStore}/dicomWeb`;
+              console.debug('[GCP Extension] Configured GCP endpoint:', pathUrl);
               return {
                 ...dicomWebConfig,
                 wadoRoot: pathUrl,
@@ -76,53 +86,57 @@ export default {
                 wadoUri: pathUrl,
                 wadoUriRoot: pathUrl,
                 qidoSupportsIncludeField: false,
-                imageRendering: "wadors",
-                thumbnailRendering: "wadors",
+                imageRendering: 'wadors',
+                thumbnailRendering: 'wadors',
                 enableStudyLazyLoad: true,
                 supportsFuzzyMatching: false,
                 supportsWildcard: false,
-                singlepart: "bulkdata,video,pdf",
-                useBulkDataURI: false,
-                bulkDataURI: undefined,
+                singlepart: 'bulkdata,video,pdf',
+                bulkDataURI: { enabled: false },
               };
             } else {
               uiNotificationService.show({
                 title: 'Invalid GCP query param',
                 message: 'The provided GCP URL is not valid.',
                 type: 'warning',
-                autoClose: false
+                autoClose: false,
               });
-              return defaultDataSource.configuration;
+              return defaultDataSource?.configuration || dicomWebConfig;
             }
           }
+          return dicomWebConfig;
         },
       },
     });
 
+    /** Check for ?gcp= param in URL or stored redirect */
     let redirectURL: { search: string } | null = null;
-    const storedRedirect = sessionStorage.getItem("ohif-redirect-to");
+    const storedRedirect = sessionStorage.getItem('ohif-redirect-to');
     if (storedRedirect) {
       try {
         redirectURL = JSON.parse(storedRedirect);
       } catch (error) {
-        console.error("Failed to parse stored redirect URL", error);
+        console.error('[GCP Extension] Failed to parse stored redirect URL', error);
       }
     }
     const redirectQueryParams = new URLSearchParams(redirectURL?.search || '');
-
     const query = new URLSearchParams(window.location.search);
-    const gcpURLFromQueryParam = query.get(GCP_DATA_SOURCE_NAME) || redirectQueryParams.get(GCP_DATA_SOURCE_NAME)
+    const gcpURLFromQueryParam =
+      query.get(GCP_DATA_SOURCE_NAME) || redirectQueryParams.get(GCP_DATA_SOURCE_NAME);
+
+    /** Only create merge data source if ?gcp= param is present */
     if (gcpURLFromQueryParam) {
+      console.debug('[GCP Extension] Creating merge data source for IDC + GCP');
       extensionManager.addDataSource(
         {
-          sourceName: "gcp-extension-merge",
-          namespace: "@ohif/extension-default.dataSourcesModule.merge",
+          sourceName: 'gcp-extension-merge',
+          namespace: '@ohif/extension-default.dataSourcesModule.merge',
           configuration: {
-            name: "gcp-extension-merge",
-            friendlyName: "GCP Merge Data Source",
+            name: 'gcp-extension-merge',
+            friendlyName: 'IDC + GCP Merge Data Source',
             seriesMerge: {
-              dataSourceNames: [defaultDataSourceName, GCP_DATA_SOURCE_NAME],
-              defaultDataSourceName: defaultDataSourceName,
+              dataSourceNames: [IDC_DATA_SOURCE_NAME, GCP_DATA_SOURCE_NAME],
+              defaultDataSourceName: IDC_DATA_SOURCE_NAME,
             },
           },
         },
