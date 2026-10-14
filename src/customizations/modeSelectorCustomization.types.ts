@@ -6,6 +6,11 @@ export type ModeSelectorStudyUidsContext = {
   search: string;
 };
 
+export type ModeSelectorSeriesUidsContext = {
+  pathname: string;
+  search: string;
+};
+
 export type ModeSelectorSwitchOptionsContext = {
   targetRouteName: string;
   pathname: string;
@@ -22,6 +27,13 @@ export type ModeSelectorFetchEnvelopeContext = {
 export type ModeSelectorCustomization = {
   resolveStudyUidsForNavigation?: (
     context: ModeSelectorStudyUidsContext
+  ) => string[] | undefined;
+  /**
+   * Resolves SeriesInstanceUIDs for series-level navigation.
+   * Supports initialSeriesInstanceUID query param and GCP Healthcare API series paths.
+   */
+  resolveSeriesUidsForNavigation?: (
+    context: ModeSelectorSeriesUidsContext
   ) => string[] | undefined;
   augmentBuildModeSwitchOptions?: (
     context: ModeSelectorSwitchOptionsContext

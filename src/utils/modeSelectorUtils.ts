@@ -356,6 +356,23 @@ export function buildModeSwitchSearch(
     uidsToSet.forEach(uid => next.append('StudyInstanceUIDs', uid));
   }
 
+  /**
+   * Preserve SeriesInstanceUIDs and initialSeriesInstanceUID for series-level navigation.
+   * These parameters allow deep-linking to specific series within a study.
+   */
+  const seriesUids = [
+    ...current.getAll('SeriesInstanceUIDs'),
+    ...current.getAll('seriesInstanceUIDs'),
+    ...current.getAll('initialSeriesInstanceUID'),
+  ].filter(Boolean);
+
+  if (seriesUids.length > 0) {
+    next.delete('SeriesInstanceUIDs');
+    next.delete('seriesInstanceUIDs');
+    next.delete('initialSeriesInstanceUID');
+    seriesUids.forEach(uid => next.append('SeriesInstanceUIDs', uid));
+  }
+
   const s = next.toString();
   return s ? `?${s}` : '';
 }

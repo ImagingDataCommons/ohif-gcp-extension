@@ -3,6 +3,8 @@ import modeSelectorCustomization from './modeSelectorCustomization';
 describe('ohif-gcp modeSelectorCustomization', () => {
   const healthcarePath =
     '/projects/p/locations/l/datasets/d/dicomStores/s/study/1.3.6.1.4.1.14519.5.2.1.123';
+  const healthcarePathWithSeries =
+    '/projects/p/locations/l/datasets/d/dicomStores/s/study/1.3.6.1.4.1.14519.5.2.1.123/series/1.3.6.1.4.1.14519.5.2.1.456';
 
   it('reads StudyInstanceUIDs from healthcare paths', () => {
     expect(
@@ -11,6 +13,51 @@ describe('ohif-gcp modeSelectorCustomization', () => {
         search: '',
       })
     ).toEqual(['1.3.6.1.4.1.14519.5.2.1.123']);
+  });
+
+  it('reads StudyInstanceUIDs from healthcare paths with series', () => {
+    expect(
+      modeSelectorCustomization.resolveStudyUidsForNavigation({
+        pathname: healthcarePathWithSeries,
+        search: '',
+      })
+    ).toEqual(['1.3.6.1.4.1.14519.5.2.1.123']);
+  });
+
+  it('reads SeriesInstanceUIDs from healthcare paths', () => {
+    expect(
+      modeSelectorCustomization.resolveSeriesUidsForNavigation({
+        pathname: healthcarePathWithSeries,
+        search: '',
+      })
+    ).toEqual(['1.3.6.1.4.1.14519.5.2.1.456']);
+  });
+
+  it('reads SeriesInstanceUIDs from initialSeriesInstanceUID query param', () => {
+    expect(
+      modeSelectorCustomization.resolveSeriesUidsForNavigation({
+        pathname: healthcarePath,
+        search: '?initialSeriesInstanceUID=1.3.6.1.4.1.14519.5.2.1.789',
+      })
+    ).toEqual(['1.3.6.1.4.1.14519.5.2.1.789']);
+  });
+
+  it('reads SeriesInstanceUIDs from SeriesInstanceUIDs query param', () => {
+    expect(
+      modeSelectorCustomization.resolveSeriesUidsForNavigation({
+        pathname: healthcarePath,
+        search: '?SeriesInstanceUIDs=1.3.6.1.4.1.14519.5.2.1.789',
+      })
+    ).toEqual(['1.3.6.1.4.1.14519.5.2.1.789']);
+  });
+
+  it('prioritizes query param over path for SeriesInstanceUIDs', () => {
+    expect(
+      modeSelectorCustomization.resolveSeriesUidsForNavigation({
+        pathname: healthcarePathWithSeries,
+        search: '?initialSeriesInstanceUID=1.3.6.1.4.1.14519.5.2.1.query',
+      })
+    ).toEqual(['1.3.6.1.4.1.14519.5.2.1.query']);
   });
 
   it('strips gcp and sets datasources when leaving healthcare viewer', () => {

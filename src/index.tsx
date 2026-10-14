@@ -3,6 +3,22 @@ import getToolbarModule from './getToolbarModule';
 import modeSelectorCustomization from './customizations/modeSelectorCustomization';
 
 /**
+ * Extracts SeriesInstanceUIDs from query parameters.
+ * Supports: initialSeriesInstanceUID, SeriesInstanceUIDs, seriesInstanceUIDs
+ */
+function getInitialSeriesInstanceUIDsFromQuery(): string[] {
+  const params = new URLSearchParams(window.location.search);
+  return [
+    ...params.getAll('initialSeriesInstanceUID'),
+    ...params.getAll('SeriesInstanceUIDs'),
+    ...params.getAll('seriesInstanceUIDs'),
+  ]
+    .flatMap(uid => uid.split(','))
+    .map(uid => uid.trim())
+    .filter(Boolean);
+}
+
+/**
  * GCP Extension for IDC.
  *
  * This extension provides:
@@ -10,6 +26,7 @@ import modeSelectorCustomization from './customizations/modeSelectorCustomizatio
  * - Merge data source combining IDC + GCP when ?gcp= param is present
  * - Mode selector customization for GCP Healthcare API path navigation
  * - Toolbar module for mode selector UI
+ * - initialSeriesInstanceUID support for series-level navigation
  */
 export default {
   /**
@@ -28,6 +45,73 @@ export default {
     ];
   },
   /**
+   * onModeEnter is called when any mode is entered.
+   * Used to handle initialSeriesInstanceUID query parameter for series-level navigation.
+   */
+  onModeEnter({ servicesManager }: { servicesManager: any }) {
+    const initialSeriesUIDs = getInitialSeriesInstanceUIDsFromQuery();
+    if (initialSeriesUIDs.length === 0) {
+      return;
+    }
+
+    console.debug('[GCP Extension] Initial series UIDs from query:', initialSeriesUIDs);
+
+    const { displaySetService, hangingProtocolService } = servicesManager.services;
+
+    /**
+     * Wait for display sets to be added, then activate the matching series.
+     * Uses a subscription to handle async study loading.
+     */
+    const activateInitialSeries = () => {
+      const displaySets = displaySetService.getActiveDisplaySets();
+
+      for (const seriesUID of initialSeriesUIDs) {
+        const matchingDisplaySet = displaySets.find(
+          (ds: any) => ds.SeriesInstanceUID === seriesUID
+        );
+
+        if (matchingDisplaySet) {
+          console.debug('[GCP Extension] Activating series:', seriesUID);
+
+          /** Use hanging protocol service to set the initial display set */
+          try {
+            hangingProtocolService.setDisplaySetsForViewports([
+              {
+                viewportId: 'default',
+                displaySetInstanceUIDs: [matchingDisplaySet.displaySetInstanceUID],
+              },
+            ]);
+          } catch (e) {
+            /** Fallback: try to set via displaySetService if hangingProtocolService fails */
+            console.debug('[GCP Extension] Falling back to displaySetService');
+          }
+          return true;
+        }
+      }
+      return false;
+    };
+
+    /** Try immediately in case display sets are already loaded */
+    if (activateInitialSeries()) {
+      return;
+    }
+
+    /** Subscribe to display set changes to handle async loading */
+    const subscription = displaySetService.subscribe(
+      displaySetService.EVENTS.DISPLAY_SETS_ADDED,
+      () => {
+        if (activateInitialSeries()) {
+          subscription.unsubscribe();
+        }
+      }
+    );
+
+    /** Clean up subscription after 30 seconds to avoid memory leaks */
+    setTimeout(() => {
+      subscription.unsubscribe();
+    }, 30000);
+  },
+  /**
    * preRegistration creates data sources for GCP Healthcare API access.
    * - 'gcp' data source: Configured dynamically from ?gcp= query param
    * - 'gcp-extension-merge': Merge data source combining IDC + GCP (only when ?gcp= present)
@@ -41,8 +125,15 @@ export default {
     const IDC_DATA_SOURCE_NAME = 'idc-dicomweb';
 
     const isValidHealthcareURL = (url: string): boolean => {
+      /**
+       * Validates GCP Healthcare API URLs with optional study and series paths.
+       * Supports:
+       * - /projects/.../dicomStores/...
+       * - /projects/.../dicomStores/.../study/<studyUID>
+       * - /projects/.../dicomStores/.../study/<studyUID>/series/<seriesUID>
+       */
       const regex =
-        /^(https:\/\/healthcare\.googleapis\.com\/v1(?:[^/]+)?\/|\/)?projects\/[^/]+\/locations\/[^/]+\/datasets\/[^/]+\/dicomStores\/[^/]+(\/study\/[^/]+)?$/;
+        /^(https:\/\/healthcare\.googleapis\.com\/v1(?:[^/]+)?\/|\/)?projects\/[^/]+\/locations\/[^/]+\/datasets\/[^/]+\/dicomStores\/[^/]+(\/study\/[^/]+(\/series\/[^/]+)?)?$/;
       return regex.test(url);
     };
 
