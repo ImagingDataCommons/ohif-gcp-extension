@@ -22,6 +22,11 @@ Supports both absolute and relative GCP Healthcare API paths:
 - Absolute: `https://healthcare.googleapis.com/v1/projects/.../dicomStores/.../study/...`
 - Relative: `/projects/.../dicomStores/.../study/...`
 
+### Series-Level Navigation
+Supports deep-linking to specific series via:
+- Query parameter: `?initialSeriesInstanceUID=<series-uid>` or `?SeriesInstanceUIDs=<series-uid>`
+- Path-based: `.../study/<study-uid>/series/<series-uid>`
+
 ## Installation
 
 ### Prerequisites
@@ -73,6 +78,16 @@ http://localhost:3000/viewer?StudyInstanceUIDs=2.25.1699095303660267419020946484
 **Relative GCP Path:**
 ```
 http://localhost:3000/viewer?StudyInstanceUIDs=2.25.169909530366026741902094648458907485460&gcp=/projects/my-project/locations/us-central1/datasets/my-dataset/dicomStores/my-store/study/2.25.169909530366026741902094648458907485460
+```
+
+**With Series Instance UID (deep-link to specific series):**
+```
+http://localhost:3000/viewer?StudyInstanceUIDs=2.25.169909530366026741902094648458907485460&gcp=/projects/my-project/locations/us-central1/datasets/my-dataset/dicomStores/my-store&initialSeriesInstanceUID=1.3.6.1.4.1.14519.5.2.1.123456789
+```
+
+**Series in GCP Path:**
+```
+http://localhost:3000/viewer?gcp=/projects/my-project/locations/us-central1/datasets/my-dataset/dicomStores/my-store/study/2.25.169909530366026741902094648458907485460/series/1.3.6.1.4.1.14519.5.2.1.123456789
 ```
 
 ## Configuration

@@ -41,8 +41,15 @@ export default {
     const IDC_DATA_SOURCE_NAME = 'idc-dicomweb';
 
     const isValidHealthcareURL = (url: string): boolean => {
+      /**
+       * Validates GCP Healthcare API URLs with optional study and series paths.
+       * Supports:
+       * - /projects/.../dicomStores/...
+       * - /projects/.../dicomStores/.../study/<studyUID>
+       * - /projects/.../dicomStores/.../study/<studyUID>/series/<seriesUID>
+       */
       const regex =
-        /^(https:\/\/healthcare\.googleapis\.com\/v1(?:[^/]+)?\/|\/)?projects\/[^/]+\/locations\/[^/]+\/datasets\/[^/]+\/dicomStores\/[^/]+(\/study\/[^/]+)?$/;
+        /^(https:\/\/healthcare\.googleapis\.com\/v1(?:[^/]+)?\/|\/)?projects\/[^/]+\/locations\/[^/]+\/datasets\/[^/]+\/dicomStores\/[^/]+(\/study\/[^/]+(\/series\/[^/]+)?)?$/;
       return regex.test(url);
     };
 
