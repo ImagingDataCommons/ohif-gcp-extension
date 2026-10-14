@@ -23,9 +23,13 @@ Supports both absolute and relative GCP Healthcare API paths:
 - Relative: `/projects/.../dicomStores/.../study/...`
 
 ### Series-Level Navigation
-Supports deep-linking to specific series via:
-- Query parameter: `?initialSeriesInstanceUID=<series-uid>` or `?SeriesInstanceUIDs=<series-uid>`
-- Path-based: `.../study/<study-uid>/series/<series-uid>`
+Supports deep-linking to specific series from external DICOM stores. Works with both standard OHIF modes (`/viewer`) and GCP mode (`/projects/...`).
+
+**Query parameters supported:**
+- `initialSeriesInstanceUID=<series-uid>`
+- `SeriesInstanceUIDs=<series-uid>`
+
+The extension automatically activates the specified series in the viewport when the study loads.
 
 ## Installation
 
@@ -80,14 +84,14 @@ http://localhost:3000/viewer?StudyInstanceUIDs=2.25.1699095303660267419020946484
 http://localhost:3000/viewer?StudyInstanceUIDs=2.25.169909530366026741902094648458907485460&gcp=/projects/my-project/locations/us-central1/datasets/my-dataset/dicomStores/my-store/study/2.25.169909530366026741902094648458907485460
 ```
 
-**With Series Instance UID (deep-link to specific series):**
+**With Series Instance UID (standard OHIF viewer + GCP extension):**
 ```
 http://localhost:3000/viewer?StudyInstanceUIDs=2.25.169909530366026741902094648458907485460&gcp=/projects/my-project/locations/us-central1/datasets/my-dataset/dicomStores/my-store&initialSeriesInstanceUID=1.3.6.1.4.1.14519.5.2.1.123456789
 ```
 
-**Series in GCP Path:**
+**With Series Instance UID (GCP mode):**
 ```
-http://localhost:3000/viewer?gcp=/projects/my-project/locations/us-central1/datasets/my-dataset/dicomStores/my-store/study/2.25.169909530366026741902094648458907485460/series/1.3.6.1.4.1.14519.5.2.1.123456789
+http://localhost:3000/projects/my-project/locations/us-central1/datasets/my-dataset/dicomStores/my-store/study/2.25.169909530366026741902094648458907485460?initialSeriesInstanceUID=1.3.6.1.4.1.14519.5.2.1.123456789
 ```
 
 ## Configuration
