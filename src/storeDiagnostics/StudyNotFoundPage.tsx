@@ -8,6 +8,7 @@ import {
   getLastRequest,
   getProblems,
   hideStoreToasts,
+  onLeaveNotFoundPage,
   runStoreChecks,
   shouldShowStudyList,
   signInAgain,
@@ -30,6 +31,9 @@ function StudyNotFoundPage() {
     hideStoreToasts();
     runStoreChecks(request).then(setChecks);
   }, [request]);
+
+  /** Without this, a later redirect here for another link could show this link's problems. */
+  useEffect(() => onLeaveNotFoundPage, []);
 
   const studyListLink = shouldShowStudyList() && (
     <p className="mt-2" data-cy="return-to-study-list-message">

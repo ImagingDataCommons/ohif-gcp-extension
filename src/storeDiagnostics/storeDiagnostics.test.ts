@@ -108,7 +108,7 @@ describe('notifyStoreDiagnostics', () => {
     global.fetch = originalFetch;
   });
 
-  it('shows one notification per problem, and none after the viewer is left', async () => {
+  it('notifies about access problems but not a study missing from the store, and nothing after the viewer is left', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       status: 403,
       ok: false,
@@ -126,6 +126,15 @@ describe('notifyStoreDiagnostics', () => {
 
     clearStoreChecks();
     uiNotificationService.show.mockClear();
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: () => Promise.resolve([]),
+    }) as never;
+    await notifyStoreDiagnostics();
+    expect(uiNotificationService.show).not.toHaveBeenCalled();
+
+    clearStoreChecks();
     const pending = notifyStoreDiagnostics();
     onLeaveViewer();
     await pending;

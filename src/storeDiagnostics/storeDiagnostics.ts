@@ -307,9 +307,23 @@ export async function notifyStoreDiagnostics(): Promise<void> {
     }
     const problems = getProblems(request, checks);
     problems.forEach(({ problem, check }) => logProblem(problem, check));
-    problems.forEach(({ key, problem }) => showProblem(key, problem, request, checks));
+    /**
+     * A study missing from a store is only worth a notification when nothing
+     * loads, which the "study not found" page covers. In the viewer another
+     * source has the study (e.g. IDC for a multi-study ?gcp= link).
+     */
+    problems
+      .filter(({ check }) => check?.status !== 'empty')
+      .forEach(({ key, problem }) => showProblem(key, problem, request, checks));
   } catch (error) {
     console.warn('[GCP] Store diagnostics failed', error);
+  }
+}
+
+/** Forgets the link once the user leaves the "study not found" page. */
+export function onLeaveNotFoundPage(): void {
+  if (!isNotFoundPage(window.location.pathname)) {
+    setRequest(null);
   }
 }
 

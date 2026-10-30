@@ -56,7 +56,12 @@ the link are removed. Each check is also logged to the console with a `[GCP]` pr
 "Sign in again" is only offered when the viewer has Google sign-in (`oidc` in the app config).
 Without it, a store that needs sign-in is reported as such.
 
-The `?gcp=` value is parsed once (`parseGcpStore`) for both the data source and the diagnostics.
+The `?gcp=` value is parsed once (`parseGcpStore`) for this extension's `gcp` data source and the
+diagnostics. A deployment that defines its own `gcp` data source in the app config (as IDC does)
+uses its own validation for loading data, which may accept fewer forms.
+
+A store that answers but does not hold the study is reported only on the "study not found" page
+and in the console, not as a notification in the viewer, where another source has the study.
 
 Turn it off with `gcpStoreDiagnostics: { enabled: false }` in the app config.
 

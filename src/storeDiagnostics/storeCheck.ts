@@ -131,7 +131,14 @@ export function checkStoreOnce(
   const token = options.getAuthorizationHeader?.()?.Authorization ?? '';
   const key = `${store.path}|${studyInstanceUID}|${token}`;
   if (!pendingChecks.has(key)) {
-    pendingChecks.set(key, checkStore(store, studyInstanceUID, options));
+    const check = checkStore(store, studyInstanceUID, options);
+    pendingChecks.set(key, check);
+    /** Network and service trouble can pass, so those results are checked again next time. */
+    check.then(({ status }) => {
+      if (status === 'network' || status === 'unavailable') {
+        pendingChecks.delete(key);
+      }
+    });
   }
   return pendingChecks.get(key);
 }

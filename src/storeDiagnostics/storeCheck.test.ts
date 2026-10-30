@@ -82,6 +82,14 @@ describe('checkStoreOnce', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it('checks again after a network or service failure', async () => {
+    const fetchImpl = respond(503);
+    await checkStoreOnce(store, STUDY, { fetchImpl });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await checkStoreOnce(store, STUDY, { fetchImpl });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('checks again after the sign-in token changes', async () => {
     const fetchImpl = respond(401);
     let token = 'Bearer old';
