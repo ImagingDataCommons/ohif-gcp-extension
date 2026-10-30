@@ -12,35 +12,107 @@ export type StoreDiagnosticsConfig = {
 };
 
 type Services = AppTypes.ServicesManager['services'];
+type Location = { pathname: string; search: string };
 
 const NOT_FOUND_STUDY_PATH = '/notfoundstudy';
+
+/** This extension's record of the link being diagnosed (full path, no credentials). */
+const REQUEST_STORAGE_KEY = 'gcp-store-diagnostics-request';
+
+/** Where OHIF's sign-in keeps the router-relative link to return to. */
+const OHIF_REDIRECT_KEY = 'ohif-redirect-to';
 
 let services: Services | null = null;
 let appConfig: Record<string, unknown> = {};
 let lastRequest: GcpRequest | null = null;
 
+/** Bumped on every mode enter and exit, so late results of a left viewer are dropped. */
+let generation = 0;
+
 const isEnabled = () =>
   (appConfig.gcpStoreDiagnostics as StoreDiagnosticsConfig | undefined)?.enabled !== false;
 
+const routerBasename = () => String(appConfig.routerBasename || '').replace(/\/$/, '');
+
+const isNotFoundPage = (pathname: string) => pathname.endsWith(NOT_FOUND_STUDY_PATH);
+
+/** True when the viewer offers Google sign-in, so asking the user to sign in makes sense. */
+export function canSignIn(): boolean {
+  const { oidc } = appConfig as { oidc?: unknown };
+  return Array.isArray(oidc) ? oidc.length > 0 : Boolean(oidc);
+}
+
+function readStorage(key: string): Location | null {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(key) || 'null');
+    return typeof value?.pathname === 'string'
+      ? { pathname: value.pathname, search: value.search || '' }
+      : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: Location | null): void {
+  try {
+    if (value) {
+      sessionStorage.setItem(key, JSON.stringify(value));
+    } else {
+      sessionStorage.removeItem(key);
+    }
+  } catch (_error) {
+    /** Storage can be unavailable (private mode); the in-memory record still works. */
+  }
+}
+
+/** True on the sign-in callback page, where the link to diagnose is the one OHIF returns to. */
+function isSignInCallback(pathname: string): boolean {
+  const oidc = (appConfig as { oidc?: Array<{ redirect_uri?: string }> }).oidc;
+  const redirectUri = Array.isArray(oidc) ? oidc[0]?.redirect_uri : undefined;
+  if (!redirectUri) {
+    return false;
+  }
+  return pathname.endsWith(new URL(redirectUri, window.location.origin).pathname);
+}
+
 /**
- * Reads the viewer link to diagnose: the current URL, or after a sign-in
- * redirect the link OHIF stored to come back to.
+ * Picks the link to diagnose when the app starts:
+ * - the current URL when it names a GCP store;
+ * - this extension's record on a reload of the "study not found" page;
+ * - on the sign-in callback, the link OHIF returns to (router-relative, so
+ *   the basename is put back).
  */
-function readInitialLocation(): { pathname: string; search: string } {
-  const current = { pathname: window.location.pathname, search: window.location.search };
-  if (hasGcpRequest(getGcpRequest(current))) {
+function readInitialRequest(): GcpRequest | null {
+  const { pathname, search } = window.location;
+  const current = getGcpRequest({ pathname, search });
+  if (hasGcpRequest(current)) {
     return current;
   }
 
-  try {
-    const stored = JSON.parse(sessionStorage.getItem('ohif-redirect-to') || 'null');
-    if (stored?.pathname) {
-      return { pathname: stored.pathname, search: stored.search || '' };
-    }
-  } catch (_error) {
-    /** No usable redirect, use the current URL. */
+  if (isNotFoundPage(pathname)) {
+    const saved = readStorage(REQUEST_STORAGE_KEY);
+    return saved ? getGcpRequest(saved) : null;
   }
-  return current;
+
+  if (isSignInCallback(pathname)) {
+    const redirect = readStorage(OHIF_REDIRECT_KEY);
+    if (redirect) {
+      const basename = routerBasename();
+      const fullPath =
+        basename && !redirect.pathname.startsWith(`${basename}/`)
+          ? `${basename}${redirect.pathname}`
+          : redirect.pathname;
+      const request = getGcpRequest({ pathname: fullPath, search: redirect.search });
+      return hasGcpRequest(request) ? request : null;
+    }
+  }
+  return null;
+}
+
+function setRequest(request: GcpRequest | null): void {
+  lastRequest = request;
+  const url = request ? new URL(request.url, window.location.origin) : null;
+  writeStorage(REQUEST_STORAGE_KEY, url ? { pathname: url.pathname, search: url.search } : null);
 }
 
 /**
@@ -56,19 +128,23 @@ export function initStoreDiagnostics({
 }): void {
   services = servicesManager.services;
   appConfig = config || {};
-  rememberRequest(readInitialLocation());
+  try {
+    setRequest(readInitialRequest());
+  } catch (error) {
+    console.warn('[GCP] Could not read the requested link', error);
+  }
 }
 
 /**
  * Records the viewer link being opened. OHIF drops the link when it
  * redirects to the "study not found" page, so the page reads it from here.
  */
-export function rememberRequest(location: { pathname: string; search: string }): void {
-  if (location.pathname.endsWith(NOT_FOUND_STUDY_PATH)) {
+export function rememberRequest(location: Location): void {
+  if (isNotFoundPage(location.pathname)) {
     return;
   }
   const request = getGcpRequest(location);
-  lastRequest = hasGcpRequest(request) ? request : null;
+  setRequest(hasGcpRequest(request) ? request : null);
 }
 
 export function getLastRequest(): GcpRequest | null {
@@ -102,7 +178,20 @@ export function runStoreChecks(request: GcpRequest): Promise<StoreCheck[]> {
   );
 }
 
-export function signInAgain(): void {
+/**
+ * Starts Google sign-in and comes back to the requested link. OHIF would
+ * otherwise return to the page the user is on, which may be "study not found".
+ */
+export function signInAgain(request: GcpRequest | null = lastRequest): void {
+  if (request) {
+    const url = new URL(request.url, window.location.origin);
+    const basename = routerBasename();
+    const pathname =
+      basename && url.pathname.startsWith(`${basename}/`)
+        ? url.pathname.slice(basename.length)
+        : url.pathname;
+    writeStorage(OHIF_REDIRECT_KEY, { pathname, search: url.search });
+  }
   services?.userAuthenticationService?.handleUnauthenticated?.();
 }
 
@@ -133,6 +222,9 @@ const INVALID_PARAM_KEY = 'invalid-gcp-param';
 
 const checkKey = (check: StoreCheck) => `${check.store.path}-${check.studyInstanceUID}`;
 
+/** Ids of the toasts currently shown, so they can be hidden when the viewer is left. */
+const shownToastIds = new Set<string>();
+
 function logProblem(problem: StoreProblem, check?: StoreCheck) {
   const where = check ? ` [${check.store.path}, study ${check.studyInstanceUID}]` : '';
   const gcp = check?.gcpMessage ? ` Google Cloud: ${check.gcpMessage}` : '';
@@ -145,15 +237,24 @@ function showProblem(
   request: GcpRequest,
   checks: StoreCheck[]
 ) {
+  const id = toastId(key);
+  shownToastIds.add(id);
   services?.uiNotificationService?.show({
-    id: toastId(key),
+    id,
     title: problem.title,
     message: `${problem.message} ${problem.hint}`,
     type: problem.type,
     duration: problem.type === 'error' ? Infinity : 15000,
     action: problem.signIn
-      ? { label: 'Sign in again', onClick: signInAgain }
-      : { label: 'Copy details', onClick: () => copySupportDetails(request, checks) },
+      ? { label: 'Sign in again', onClick: () => signInAgain(request) }
+      : {
+          /**
+           * Also closes the toast: OHIF's toaster has no close button, so the
+           * action is how an error that stays open gets dismissed.
+           */
+          label: 'Copy details',
+          onClick: () => copySupportDetails(request, checks),
+        },
   });
 }
 
@@ -162,7 +263,7 @@ export function getProblems(
   request: GcpRequest,
   checks: StoreCheck[]
 ): Array<{ key: string; problem: StoreProblem; check?: StoreCheck }> {
-  const userEmail = getUserEmail();
+  const options = { userEmail: getUserEmail(), canSignIn: canSignIn() };
   const problems: Array<{ key: string; problem: StoreProblem; check?: StoreCheck }> = [];
 
   if (request.invalidGcpParam) {
@@ -172,7 +273,7 @@ export function getProblems(
     });
   }
   checks.forEach(check => {
-    const problem = describeStoreCheck(check, userEmail);
+    const problem = describeStoreCheck(check, options);
     if (problem) {
       problems.push({ key: checkKey(check), problem, check });
     }
@@ -180,11 +281,10 @@ export function getProblems(
   return problems;
 }
 
-/** Dismisses the toasts for a link, used once a page shows the same problems. */
-export function hideStoreToasts(request: GcpRequest, checks: StoreCheck[]): void {
-  [INVALID_PARAM_KEY, ...checks.map(checkKey)].forEach(key =>
-    services?.uiNotificationService?.hide?.(toastId(key))
-  );
+/** Dismisses the toasts shown for the viewer, e.g. once a page shows the same problems. */
+export function hideStoreToasts(): void {
+  shownToastIds.forEach(id => services?.uiNotificationService?.hide?.(id));
+  shownToastIds.clear();
 }
 
 /**
@@ -193,19 +293,35 @@ export function hideStoreToasts(request: GcpRequest, checks: StoreCheck[]): void
  * covers `?gcp=` in any mode as well as the GCP mode route.
  */
 export async function notifyStoreDiagnostics(): Promise<void> {
-  rememberRequest({ pathname: window.location.pathname, search: window.location.search });
-  const request = getLastRequest();
-  if (!request) {
-    return;
-  }
+  const current = ++generation;
+  try {
+    rememberRequest({ pathname: window.location.pathname, search: window.location.search });
+    const request = getLastRequest();
+    if (!request) {
+      return;
+    }
 
-  const checks = await runStoreChecks(request);
-  const problems = getProblems(request, checks);
-  problems.forEach(({ problem, check }) => logProblem(problem, check));
-
-  /** The "study not found" page shows these itself. */
-  if (window.location.pathname.endsWith(NOT_FOUND_STUDY_PATH)) {
-    return;
+    const checks = await runStoreChecks(request);
+    if (current !== generation) {
+      return;
+    }
+    const problems = getProblems(request, checks);
+    problems.forEach(({ problem, check }) => logProblem(problem, check));
+    problems.forEach(({ key, problem }) => showProblem(key, problem, request, checks));
+  } catch (error) {
+    console.warn('[GCP] Store diagnostics failed', error);
   }
-  problems.forEach(({ key, problem }) => showProblem(key, problem, request, checks));
+}
+
+/**
+ * Drops pending results and hides the toasts when the viewer is left. On a
+ * redirect to "study not found" the link is kept for that page; anywhere else
+ * it is forgotten, so a later page is never explained with an old link.
+ */
+export function onLeaveViewer(): void {
+  generation++;
+  hideStoreToasts();
+  if (!isNotFoundPage(window.location.pathname)) {
+    setRequest(null);
+  }
 }

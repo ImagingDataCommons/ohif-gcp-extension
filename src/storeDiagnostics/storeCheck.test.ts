@@ -25,7 +25,7 @@ describe('statusFromHttp', () => {
 });
 
 describe('checkStore', () => {
-  it('asks the store for one series of the study with the sign-in token', async () => {
+  it('searches the store for the study with the sign-in token', async () => {
     const fetchImpl = respond(200, [{}]);
     const result = await checkStore(store, STUDY, {
       fetchImpl,
@@ -33,7 +33,7 @@ describe('checkStore', () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      `${store.dicomWebRoot}/studies/${STUDY}/series?limit=1`,
+      `${store.dicomWebRoot}/studies?StudyInstanceUID=${STUDY}&limit=1`,
       { headers: { Accept: 'application/dicom+json', Authorization: 'Bearer t' } }
     );
     expect(result).toMatchObject({ status: 'ok', httpStatus: 200, studyInstanceUID: STUDY });
@@ -79,6 +79,19 @@ describe('checkStoreOnce', () => {
       checkStoreOnce(store, STUDY, { fetchImpl }),
       checkStoreOnce(store, '4.5', { fetchImpl }),
     ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('checks again after the sign-in token changes', async () => {
+    const fetchImpl = respond(401);
+    let token = 'Bearer old';
+    const getAuthorizationHeader = () => ({ Authorization: token });
+
+    await checkStoreOnce(store, STUDY, { fetchImpl, getAuthorizationHeader });
+    await checkStoreOnce(store, STUDY, { fetchImpl, getAuthorizationHeader });
+    token = 'Bearer new';
+    await checkStoreOnce(store, STUDY, { fetchImpl, getAuthorizationHeader });
+
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });

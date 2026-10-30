@@ -2,14 +2,14 @@ import type { GcpStore } from './gcpStores';
 
 /**
  * Outcome of asking a GCP DICOM store for a study:
- * - ok: the store has series for the study
- * - empty: the store answered but holds nothing for the study
+ * - ok: the store holds the study
+ * - empty: the store answered but does not hold the study
  * - unauthenticated: 401, no or expired Google sign-in
  * - forbidden: 403, the account lacks access (GCP also answers 403 for stores that do not exist)
  * - notFound: 404, the project, dataset or store does not exist
  * - network: no HTTP response at all (offline, VPN, firewall or CORS)
  * - unavailable: 429 or 5xx, quota or service trouble
- * - failed: any other HTTP error
+ * - failed: any other HTTP error (400 usually means a malformed study UID)
  */
 export type StoreCheckStatus =
   | 'ok'
@@ -65,8 +65,9 @@ async function readGcpMessage(response: Response): Promise<string | undefined> {
 }
 
 /**
- * Asks one store for one series of the study. One small QIDO request tells
- * apart access problems, a missing store and a missing study.
+ * Asks one store whether it holds the study, the same study search OHIF uses
+ * to validate a link. A missing study answers 200 with an empty list, so a
+ * 403 or 404 points at access or the store, never at the study.
  */
 export async function checkStore(
   store: GcpStore,
@@ -74,7 +75,7 @@ export async function checkStore(
   { getAuthorizationHeader, fetchImpl = fetch }: StoreCheckOptions = {}
 ): Promise<StoreCheck> {
   const result = { store, studyInstanceUID, checkedAt: new Date().toISOString() };
-  const url = `${store.dicomWebRoot}/studies/${encodeURIComponent(studyInstanceUID)}/series?limit=1`;
+  const url = `${store.dicomWebRoot}/studies?StudyInstanceUID=${encodeURIComponent(studyInstanceUID)}&limit=1`;
   const headers: Record<string, string> = { Accept: 'application/dicom+json' };
   const authorization = getAuthorizationHeader?.()?.Authorization;
   if (authorization) {
@@ -118,15 +119,17 @@ export async function checkStore(
 const pendingChecks = new Map<string, Promise<StoreCheck>>();
 
 /**
- * Checks a store once per page load, so the viewer and the "study not
- * found" page share one request. Signing in again reloads the page.
+ * Checks a store once per sign-in, so the viewer and the "study not found"
+ * page share one request. A new token (sign-in or silent renewal) checks
+ * again, so an expired sign-in is not reported after it was renewed.
  */
 export function checkStoreOnce(
   store: GcpStore,
   studyInstanceUID: string,
   options: StoreCheckOptions = {}
 ): Promise<StoreCheck> {
-  const key = `${store.path}|${studyInstanceUID}`;
+  const token = options.getAuthorizationHeader?.()?.Authorization ?? '';
+  const key = `${store.path}|${studyInstanceUID}|${token}`;
   if (!pendingChecks.has(key)) {
     pendingChecks.set(key, checkStore(store, studyInstanceUID, options));
   }

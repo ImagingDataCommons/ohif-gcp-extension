@@ -45,12 +45,18 @@ that store for the requested study and tells the user what went wrong, if anythi
 | Empty | The store does not hold the study |
 | Invalid `?gcp=` | The value is not a DICOM store path, with the expected shape |
 
-In the viewer these are notifications; errors stay until dismissed. When OHIF ends up on its "study
-not found" page, the extension replaces that page with the same explanation, the reason Google Cloud
-gave, and buttons to sign in again, copy support details or reopen the link. **Copy details**
-produces a plain-text report (link, account, store, study, HTTP status, Google Cloud message, no
-tokens) that users can send to whoever shared the link. Each check is also logged to the console
-with a `[GCP]` prefix.
+In the viewer these are notifications; errors stay until their button is used. They are hidden when
+the viewer is left. When OHIF ends up on its "study not found" page, the extension replaces that page
+with the same explanation, the reason Google Cloud gave, and buttons to sign in again, copy support
+details or reopen the link. The page keeps working after a reload, and "Sign in again" returns to
+the original link. **Copy details** produces a plain-text report (link, signed-in email, store,
+study, HTTP status, Google Cloud message) that users can send to whoever shared the link; tokens in
+the link are removed. Each check is also logged to the console with a `[GCP]` prefix.
+
+"Sign in again" is only offered when the viewer has Google sign-in (`oidc` in the app config).
+Without it, a store that needs sign-in is reported as such.
+
+The `?gcp=` value is parsed once (`parseGcpStore`) for both the data source and the diagnostics.
 
 Turn it off with `gcpStoreDiagnostics: { enabled: false }` in the app config.
 

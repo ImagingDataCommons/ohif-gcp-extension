@@ -5,6 +5,8 @@ import {
   StudyNotFoundPage,
   initStoreDiagnostics,
   notifyStoreDiagnostics,
+  onLeaveViewer,
+  parseGcpStore,
 } from './storeDiagnostics';
 
 /**
@@ -128,6 +130,13 @@ export default {
     }, 30000);
   },
   /**
+   * Drops pending store diagnostics and their notifications when the viewer
+   * is left.
+   */
+  onModeExit() {
+    onLeaveViewer();
+  },
+  /**
    * preRegistration creates data sources for GCP Healthcare API access.
    * - 'gcp' data source: Configured dynamically from ?gcp= query param
    * - 'gcp-extension-merge': Merge data source combining IDC + GCP (only when ?gcp= present)
@@ -139,19 +148,6 @@ export default {
 
     const GCP_DATA_SOURCE_NAME = 'gcp';
     const IDC_DATA_SOURCE_NAME = 'idc-dicomweb';
-
-    const isValidHealthcareURL = (url: string): boolean => {
-      /**
-       * Validates GCP Healthcare API URLs with optional study and series paths.
-       * Supports:
-       * - /projects/.../dicomStores/...
-       * - /projects/.../dicomStores/.../study/<studyUID>
-       * - /projects/.../dicomStores/.../study/<studyUID>/series/<seriesUID>
-       */
-      const regex =
-        /^(https:\/\/healthcare\.googleapis\.com\/v1(?:[^/]+)?\/|\/)?projects\/[^/]+\/locations\/[^/]+\/datasets\/[^/]+\/dicomStores\/[^/]+(\/study\/[^/]+(\/series\/[^/]+)?)?$/;
-      return regex.test(url);
-    };
 
     const defaultDataSource = appConfig.dataSources.find(
       (dataSource: { sourceName: string }) => dataSource.sourceName === IDC_DATA_SOURCE_NAME
@@ -173,18 +169,13 @@ export default {
         singlepart: 'bulkdata,video,pdf',
         bulkDataURI: { enabled: false },
         onConfiguration: (dicomWebConfig, options) => {
-          const extractParams = (url: string) => ({
-            project: url.split('projects/')[1].split('/')[0],
-            location: url.split('locations/')[1].split('/')[0],
-            dataset: url.split('datasets/')[1].split('/')[0],
-            dicomStore: url.split('dicomStores/')[1].split('/')[0],
-          });
           const { query } = options;
           const gcp = query.get(GCP_DATA_SOURCE_NAME);
           if (gcp) {
-            if (isValidHealthcareURL(gcp)) {
-              const { project, location, dataset, dicomStore } = extractParams(gcp);
-              const pathUrl = `https://healthcare.googleapis.com/v1/projects/${project}/locations/${location}/datasets/${dataset}/dicomStores/${dicomStore}/dicomWeb`;
+            /** Same parser as the store diagnostics, so both agree on what is valid. */
+            const store = parseGcpStore(gcp);
+            if (store) {
+              const pathUrl = store.dicomWebRoot;
               console.debug('[GCP Extension] Configured GCP endpoint:', pathUrl);
               return {
                 ...dicomWebConfig,

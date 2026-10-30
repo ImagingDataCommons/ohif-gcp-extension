@@ -18,7 +18,9 @@ describe('describeStoreCheck', () => {
   });
 
   it('names the account, store and role when access is denied', () => {
-    const problem = describeStoreCheck(check('forbidden', { httpStatus: 403 }), 'a@b.org');
+    const problem = describeStoreCheck(check('forbidden', { httpStatus: 403 }), {
+      userEmail: 'a@b.org',
+    });
     expect(problem.type).toBe('error');
     expect(problem.message).toContain('a@b.org');
     expect(problem.message).toContain('"s"');
@@ -28,7 +30,27 @@ describe('describeStoreCheck', () => {
 
   it('offers to sign in again for an expired sign-in', () => {
     expect(describeStoreCheck(check('unauthenticated', { httpStatus: 401 })).signIn).toBe(true);
-    expect(describeStoreCheck(check('forbidden')).signIn).toBeUndefined();
+    expect(describeStoreCheck(check('forbidden'), { userEmail: 'a@b.org' }).signIn).toBeUndefined();
+  });
+
+  it('does not offer sign-in when the viewer has none', () => {
+    const unauthenticated = describeStoreCheck(check('unauthenticated'), { canSignIn: false });
+    expect(unauthenticated.signIn).toBeUndefined();
+    expect(unauthenticated.message).toContain('does not offer');
+
+    const forbidden = describeStoreCheck(check('forbidden'), { canSignIn: false });
+    expect(forbidden.signIn).toBe(false);
+    expect(forbidden.hint).toContain('readable without sign-in');
+  });
+
+  it('says when nobody is signed in on a 403', () => {
+    const problem = describeStoreCheck(check('forbidden'));
+    expect(problem.message).toContain('No Google account is signed in');
+    expect(problem.signIn).toBe(true);
+  });
+
+  it('points at the study UID for a 400', () => {
+    expect(describeStoreCheck(check('failed', { httpStatus: 400 })).hint).toContain('1.2.3');
   });
 
   it('warns rather than errors when only the study is missing', () => {

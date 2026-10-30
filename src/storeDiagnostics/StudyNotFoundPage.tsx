@@ -27,14 +27,12 @@ function StudyNotFoundPage() {
     if (!request) {
       return;
     }
-    runStoreChecks(request).then(result => {
-      hideStoreToasts(request, result);
-      setChecks(result);
-    });
+    hideStoreToasts();
+    runStoreChecks(request).then(setChecks);
   }, [request]);
 
   const studyListLink = shouldShowStudyList() && (
-    <p className="mt-2">
+    <p className="mt-2" data-cy="return-to-study-list-message">
       Return to the{' '}
       <Link className="text-highlight" to="/">
         study list
@@ -60,7 +58,7 @@ function StudyNotFoundPage() {
 
   return (
     <div className="text-foreground absolute flex h-full w-full items-center justify-center">
-      <div style={{ maxWidth: 720, padding: 16 }}>
+      <div style={{ maxWidth: 720, padding: 16 }} role="status" aria-live="polite">
         <h4 data-cy="study-not-found-message">The requested study could not be loaded.</h4>
 
         {!checks && (
@@ -88,7 +86,7 @@ function StudyNotFoundPage() {
         {checks && (
           <div className="mt-4 flex" style={{ gap: 8 }}>
             {problems.some(({ problem }) => problem.signIn) && (
-              <Button onClick={signInAgain}>Sign in again</Button>
+              <Button onClick={() => signInAgain(request)}>Sign in again</Button>
             )}
             <Button variant="secondary" onClick={() => copySupportDetails(request, checks)}>
               Copy details

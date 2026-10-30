@@ -71,6 +71,38 @@ describe('getGcpRequest', () => {
     expect(hasGcpRequest(request)).toBe(true);
   });
 
+  it('drops credentials from the kept link', () => {
+    const request = getGcpRequest({
+      pathname: '/viewer',
+      search: `?token=secret&gcp=${STORE}&access_token=x&StudyInstanceUIDs=${STUDY}`,
+    });
+    expect(request.url).not.toContain('secret');
+    expect(request.url).not.toContain('access_token');
+    expect(request.url).toContain('StudyInstanceUIDs=1.2.3');
+  });
+
+  it('does not throw on malformed percent-encoding', () => {
+    expect(() =>
+      getGcpRequest({ pathname: `/${STORE}/study/1.2%E0`, search: '?StudyInstanceUIDs=1.2%253' })
+    ).not.toThrow();
+    expect(parseGcpStore('projects/a%25b/locations/l/datasets/d/dicomStores/s')?.project).toBe(
+      'a%25b'
+    );
+  });
+
+  it('accepts only store paths for ?gcp=, as the data source does', () => {
+    expect(parseGcpStore(`https://proxy.example/${STORE}`)).toBeNull();
+    expect(parseGcpStore(`https://healthcare.googleapis.com/v1beta1/${STORE}`)?.dicomStore).toBe(
+      's'
+    );
+  });
+
+  it('reads the GCP mode route under a router basename', () => {
+    const request = getGcpRequest({ pathname: `/v3/${STORE}/study/${STUDY}`, search: '' });
+    expect(request.stores[0].store.path).toBe(STORE);
+    expect(request.studyInstanceUIDs).toEqual([STUDY]);
+  });
+
   it('is empty for links without a GCP store', () => {
     expect(
       hasGcpRequest(getGcpRequest({ pathname: '/viewer', search: `?StudyInstanceUIDs=${STUDY}` }))
