@@ -31,6 +31,29 @@ Supports deep-linking to specific series from external DICOM stores. Works with 
 
 The extension automatically activates the specified series in the viewport when the study loads.
 
+### Store Diagnostics
+When a link names a GCP DICOM store (`?gcp=` in any mode, or the GCP mode route), the extension asks
+that store for the requested study and tells the user what went wrong, if anything:
+
+| Result | What the user sees |
+|---|---|
+| HTTP 401 | Sign-in missing or expired, with a **Sign in again** button |
+| HTTP 403 | The signed-in account cannot read the store (or the store does not exist), with the IAM role to request |
+| HTTP 404 | The project, dataset or store does not exist |
+| No response | The Google Cloud Healthcare API could not be reached (network, VPN, firewall or CORS) |
+| HTTP 429 / 5xx | Quota or service trouble, try again later |
+| Empty | The store does not hold the study |
+| Invalid `?gcp=` | The value is not a DICOM store path, with the expected shape |
+
+In the viewer these are notifications; errors stay until dismissed. When OHIF ends up on its "study
+not found" page, the extension replaces that page with the same explanation, the reason Google Cloud
+gave, and buttons to sign in again, copy support details or reopen the link. **Copy details**
+produces a plain-text report (link, account, store, study, HTTP status, Google Cloud message, no
+tokens) that users can send to whoever shared the link. Each check is also logged to the console
+with a `[GCP]` prefix.
+
+Turn it off with `gcpStoreDiagnostics: { enabled: false }` in the app config.
+
 ## Installation
 
 ### Prerequisites

@@ -1,6 +1,11 @@
 import { id } from './id';
 import getToolbarModule from './getToolbarModule';
 import modeSelectorCustomization from './customizations/modeSelectorCustomization';
+import {
+  StudyNotFoundPage,
+  initStoreDiagnostics,
+  notifyStoreDiagnostics,
+} from './storeDiagnostics';
 
 /**
  * Extracts SeriesInstanceUIDs from query parameters.
@@ -27,6 +32,9 @@ function getInitialSeriesInstanceUIDsFromQuery(): string[] {
  * - Mode selector customization for GCP Healthcare API path navigation
  * - Toolbar module for mode selector UI
  * - initialSeriesInstanceUID support for series-level navigation
+ * - Diagnostics for GCP DICOM stores that cannot be read (no access, expired
+ *   sign-in, missing store or study, invalid link), shown as notifications in
+ *   the viewer and on the "study not found" page
  */
 export default {
   /**
@@ -40,15 +48,23 @@ export default {
         name: 'default',
         value: {
           'ohif.modeSelector': modeSelectorCustomization,
+          'routes.customRoutes': {
+            routes: {
+              $push: [{ path: '/notfoundstudy', children: StudyNotFoundPage }],
+            },
+          },
         },
       },
     ];
   },
   /**
    * onModeEnter is called when any mode is entered.
-   * Used to handle initialSeriesInstanceUID query parameter for series-level navigation.
+   * Checks the GCP stores in the link and handles the initialSeriesInstanceUID
+   * query parameter for series-level navigation.
    */
   onModeEnter({ servicesManager }: { servicesManager: any }) {
+    notifyStoreDiagnostics();
+
     const initialSeriesUIDs = getInitialSeriesInstanceUIDsFromQuery();
     if (initialSeriesUIDs.length === 0) {
       return;
@@ -119,7 +135,7 @@ export default {
   preRegistration: ({ extensionManager, appConfig, servicesManager }) => {
     console.debug('[GCP Extension] Initializing...');
 
-    const { uiNotificationService } = servicesManager.services;
+    initStoreDiagnostics({ servicesManager, appConfig });
 
     const GCP_DATA_SOURCE_NAME = 'gcp';
     const IDC_DATA_SOURCE_NAME = 'idc-dicomweb';
@@ -186,12 +202,7 @@ export default {
                 bulkDataURI: { enabled: false },
               };
             } else {
-              uiNotificationService.show({
-                title: 'Invalid GCP query param',
-                message: 'The provided GCP URL is not valid.',
-                type: 'warning',
-                autoClose: false,
-              });
+              /** The store diagnostics tell the user about the invalid link. */
               return defaultDataSource?.configuration || dicomWebConfig;
             }
           }
