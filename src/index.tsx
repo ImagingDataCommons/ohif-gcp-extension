@@ -1,6 +1,13 @@
 import { id } from './id';
 import getToolbarModule from './getToolbarModule';
 import modeSelectorCustomization from './customizations/modeSelectorCustomization';
+import {
+  StudyNotFoundPage,
+  initStoreDiagnostics,
+  notifyStoreDiagnostics,
+  onLeaveViewer,
+  parseGcpStore,
+} from './storeDiagnostics';
 
 /**
  * Extracts SeriesInstanceUIDs from query parameters.
@@ -27,6 +34,9 @@ function getInitialSeriesInstanceUIDsFromQuery(): string[] {
  * - Mode selector customization for GCP Healthcare API path navigation
  * - Toolbar module for mode selector UI
  * - initialSeriesInstanceUID support for series-level navigation
+ * - Diagnostics for GCP DICOM stores that cannot be read (no access, expired
+ *   sign-in, missing store or study, invalid link), shown as notifications in
+ *   the viewer and on the "study not found" page
  */
 export default {
   /**
@@ -40,15 +50,23 @@ export default {
         name: 'default',
         value: {
           'ohif.modeSelector': modeSelectorCustomization,
+          'routes.customRoutes': {
+            routes: {
+              $push: [{ path: '/notfoundstudy', children: StudyNotFoundPage }],
+            },
+          },
         },
       },
     ];
   },
   /**
    * onModeEnter is called when any mode is entered.
-   * Used to handle initialSeriesInstanceUID query parameter for series-level navigation.
+   * Checks the GCP stores in the link and handles the initialSeriesInstanceUID
+   * query parameter for series-level navigation.
    */
   onModeEnter({ servicesManager }: { servicesManager: any }) {
+    notifyStoreDiagnostics();
+
     const initialSeriesUIDs = getInitialSeriesInstanceUIDsFromQuery();
     if (initialSeriesUIDs.length === 0) {
       return;
@@ -112,6 +130,13 @@ export default {
     }, 30000);
   },
   /**
+   * Drops pending store diagnostics and their notifications when the viewer
+   * is left.
+   */
+  onModeExit() {
+    onLeaveViewer();
+  },
+  /**
    * preRegistration creates data sources for GCP Healthcare API access.
    * - 'gcp' data source: Configured dynamically from ?gcp= query param
    * - 'gcp-extension-merge': Merge data source combining IDC + GCP (only when ?gcp= present)
@@ -119,23 +144,10 @@ export default {
   preRegistration: ({ extensionManager, appConfig, servicesManager }) => {
     console.debug('[GCP Extension] Initializing...');
 
-    const { uiNotificationService } = servicesManager.services;
+    initStoreDiagnostics({ servicesManager, appConfig });
 
     const GCP_DATA_SOURCE_NAME = 'gcp';
     const IDC_DATA_SOURCE_NAME = 'idc-dicomweb';
-
-    const isValidHealthcareURL = (url: string): boolean => {
-      /**
-       * Validates GCP Healthcare API URLs with optional study and series paths.
-       * Supports:
-       * - /projects/.../dicomStores/...
-       * - /projects/.../dicomStores/.../study/<studyUID>
-       * - /projects/.../dicomStores/.../study/<studyUID>/series/<seriesUID>
-       */
-      const regex =
-        /^(https:\/\/healthcare\.googleapis\.com\/v1(?:[^/]+)?\/|\/)?projects\/[^/]+\/locations\/[^/]+\/datasets\/[^/]+\/dicomStores\/[^/]+(\/study\/[^/]+(\/series\/[^/]+)?)?$/;
-      return regex.test(url);
-    };
 
     const defaultDataSource = appConfig.dataSources.find(
       (dataSource: { sourceName: string }) => dataSource.sourceName === IDC_DATA_SOURCE_NAME
@@ -157,18 +169,13 @@ export default {
         singlepart: 'bulkdata,video,pdf',
         bulkDataURI: { enabled: false },
         onConfiguration: (dicomWebConfig, options) => {
-          const extractParams = (url: string) => ({
-            project: url.split('projects/')[1].split('/')[0],
-            location: url.split('locations/')[1].split('/')[0],
-            dataset: url.split('datasets/')[1].split('/')[0],
-            dicomStore: url.split('dicomStores/')[1].split('/')[0],
-          });
           const { query } = options;
           const gcp = query.get(GCP_DATA_SOURCE_NAME);
           if (gcp) {
-            if (isValidHealthcareURL(gcp)) {
-              const { project, location, dataset, dicomStore } = extractParams(gcp);
-              const pathUrl = `https://healthcare.googleapis.com/v1/projects/${project}/locations/${location}/datasets/${dataset}/dicomStores/${dicomStore}/dicomWeb`;
+            /** Same parser as the store diagnostics, so both agree on what is valid. */
+            const store = parseGcpStore(gcp);
+            if (store) {
+              const pathUrl = store.dicomWebRoot;
               console.debug('[GCP Extension] Configured GCP endpoint:', pathUrl);
               return {
                 ...dicomWebConfig,
@@ -186,12 +193,7 @@ export default {
                 bulkDataURI: { enabled: false },
               };
             } else {
-              uiNotificationService.show({
-                title: 'Invalid GCP query param',
-                message: 'The provided GCP URL is not valid.',
-                type: 'warning',
-                autoClose: false,
-              });
+              /** The store diagnostics tell the user about the invalid link. */
               return defaultDataSource?.configuration || dicomWebConfig;
             }
           }

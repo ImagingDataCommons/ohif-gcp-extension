@@ -31,6 +31,40 @@ Supports deep-linking to specific series from external DICOM stores. Works with 
 
 The extension automatically activates the specified series in the viewport when the study loads.
 
+### Store Diagnostics
+When a link names a GCP DICOM store (`?gcp=` in any mode, or the GCP mode route), the extension asks
+that store for the requested study and tells the user what went wrong, if anything:
+
+| Result | What the user sees |
+|---|---|
+| HTTP 401 | Sign-in missing or expired, with a **Sign in again** button |
+| HTTP 403 | The signed-in account cannot read the store (or the store does not exist), with the IAM role to request |
+| HTTP 404 | The project, dataset or store does not exist |
+| No response | The Google Cloud Healthcare API could not be reached (network, VPN, firewall or CORS) |
+| HTTP 429 / 5xx | Quota or service trouble, try again later |
+| Empty | The store does not hold the study |
+| Invalid `?gcp=` | The value is not a DICOM store path, with the expected shape |
+
+In the viewer these are notifications; errors stay until their button is used. They are hidden when
+the viewer is left. When OHIF ends up on its "study not found" page, the extension replaces that page
+with the same explanation, the reason Google Cloud gave, and buttons to sign in again, copy support
+details or reopen the link. The page keeps working after a reload, and "Sign in again" returns to
+the original link. **Copy details** produces a plain-text report (link, signed-in email, store,
+study, HTTP status, Google Cloud message) that users can send to whoever shared the link; tokens in
+the link are removed. Each check is also logged to the console with a `[GCP]` prefix.
+
+"Sign in again" is only offered when the viewer has Google sign-in (`oidc` in the app config).
+Without it, a store that needs sign-in is reported as such.
+
+The `?gcp=` value is parsed once (`parseGcpStore`) for this extension's `gcp` data source and the
+diagnostics. A deployment that defines its own `gcp` data source in the app config (as IDC does)
+uses its own validation for loading data, which may accept fewer forms.
+
+A store that answers but does not hold the study is reported only on the "study not found" page
+and in the console, not as a notification in the viewer, where another source has the study.
+
+Turn it off with `gcpStoreDiagnostics: { enabled: false }` in the app config.
+
 ## Installation
 
 ### Prerequisites
